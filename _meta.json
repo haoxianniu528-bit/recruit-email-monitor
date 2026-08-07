@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "description": "招聘邮件监控系统 - Agent 智能判定招聘邮件，自动记录到表格、飞书通知、每日简报",
   "author": "牛浩先",
-  "homepage": "https://github.com/nhaoxi/recruit-email-monitor",
+  "homepage": "https://github.com/haoxianniu528-bit/recruit-email-monitor",
   "license": "MIT",
   "tags": ["email", "recruitment", "monitor", "feishu", "automation", "agent"],
   "requirements": {

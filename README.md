@@ -1,7 +1,7 @@
 ---
 name: recruit-email-monitor
 description: 招聘邮件监控系统 - Agent 智能判定招聘邮件，自动记录到表格、飞书通知、每日简报
-homepage: https://github.com/nhaoxi/recruit-email-monitor
+homepage: https://github.com/haoxianniu528-bit/recruit-email-monitor
 metadata: {
   "clawdbot": {
     "emoji": "📧",
