@@ -38,23 +38,6 @@
         "text": "python3 scripts/email-daily-briefing.py"
       },
       "sessionTarget": "main"
-    },
-    {
-      "id": "recruit-company-website",
-      "name": "公司官网招聘监控",
-      "enabled": false,
-      "schedule": {
-        "kind": "cron",
-        "expr": "0 */4 * * *"
-      },
-      "description": "每 4 小时检查公司官网招聘公告（腾讯/阿里/华为/国家电网等）",
-      "notifyOnMatch": true,
-      "wakeMode": "now",
-      "payload": {
-        "kind": "systemEvent",
-        "text": "python3 scripts/company-website-monitor.py"
-      },
-      "sessionTarget": "main"
     }
   ]
 }

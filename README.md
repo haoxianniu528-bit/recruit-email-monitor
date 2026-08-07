@@ -7,7 +7,7 @@ metadata: {
     "emoji": "📧",
     "requires": {
       "bins": ["python3"],
-      "pip": ["openpyxl", "requests", "beautifulsoup4"]
+      "pip": ["openpyxl"]
     },
     "install": [
       {
@@ -28,7 +28,7 @@ metadata: {
 
 # 招聘邮件监控系统 📧
 
-自动监控多个邮箱的招聘相关邮件 + 公司官网招聘公告，记录到 Excel 表格，支持飞书通知和每日简报。
+自动监控多个邮箱的招聘相关邮件，记录到 Excel 表格，支持飞书通知和每日简报。
 
 **核心特色**: 不再依赖脆弱的关键词匹配，而是由 **Agent 逐封智能判定** 是否为招聘邮件，准确率远超传统规则方案。
 
@@ -41,11 +41,6 @@ metadata: {
 - **飞书通知**: 发现新邮件时由 Agent 直接汇报
 - **每日简报**: 每天早上 9:00 汇总待处理邮件
 - **表格管理**: 自动记录到 Excel，支持状态标记
-
-### 🏢 官网监控
-- **国家电网**: 监控国家电网人力资源招聘平台
-- **腾讯/阿里/华为**: 可扩展（需单独适配解析器）
-- **实时通知**: 发现新招聘公告时立即发送飞书消息
 
 ## 工作原理（Agent 判定模式）
 
@@ -107,7 +102,6 @@ cp scripts/config.example.json scripts/config.json
 | `fetch-emails.py` | 连接邮箱，拉取未处理邮件候选（预过滤营销发件域名） |
 | `record-emails.py` | 按 Agent 判定结果把招聘邮件写入 Excel，更新去重列表 |
 | `email-daily-briefing.py` | 每天早上 9:00 生成并发送待处理邮件简报 |
-| `company-website-monitor.py` | 监控公司官网招聘公告（国家电网等） |
 
 ## 表格结构
 

@@ -8,14 +8,13 @@
   "tags": ["email", "recruitment", "monitor", "feishu", "automation", "agent"],
   "requirements": {
     "python": ">=3.8",
-    "pip": ["openpyxl", "requests", "beautifulsoup4"]
+    "pip": ["openpyxl"]
   },
   "files": [
     "SKILL.md",
     "scripts/fetch-emails.py",
     "scripts/record-emails.py",
     "scripts/email-daily-briefing.py",
-    "scripts/company-website-monitor.py",
     "scripts/config.example.json"
   ],
   "config": {
