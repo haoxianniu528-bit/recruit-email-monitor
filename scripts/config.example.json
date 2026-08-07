@@ -1,0 +1,19 @@
+{
+  "email_accounts": [
+    {
+      "name": "QQ 邮箱",
+      "user": "your_qq@qq.com",
+      "password": "your_auth_code",
+      "host": "pop.qq.com",
+      "port": 995
+    },
+    {
+      "name": "163 邮箱",
+      "user": "your_name@163.com",
+      "password": "your_auth_code",
+      "host": "pop.163.com",
+      "port": 995
+    }
+  ],
+  "feishu_target": "user:YOUR_FEISHU_USER_ID"
+}

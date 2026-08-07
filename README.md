@@ -1,0 +1,134 @@
+---
+name: recruit-email-monitor
+description: 招聘邮件监控系统 - Agent 智能判定招聘邮件，自动记录到表格、飞书通知、每日简报
+homepage: https://github.com/nhaoxi/recruit-email-monitor
+metadata: {
+  "clawdbot": {
+    "emoji": "📧",
+    "requires": {
+      "bins": ["python3"],
+      "pip": ["openpyxl", "requests", "beautifulsoup4"]
+    },
+    "install": [
+      {
+        "id": "pip-deps",
+        "kind": "pip",
+        "packages": ["openpyxl"],
+        "label": "安装依赖 (openpyxl)"
+      }
+    ],
+    "config": {
+      "config_json": "scripts/config.json（本地创建，含 email_accounts 与 feishu_target，参考 config.example.json）",
+      "excel_path": "招聘邮件汇总表格路径",
+      "briefing_path": "招聘邮件每日简报路径"
+    }
+  }
+}
+---
+
+# 招聘邮件监控系统 📧
+
+自动监控多个邮箱的招聘相关邮件 + 公司官网招聘公告，记录到 Excel 表格，支持飞书通知和每日简报。
+
+**核心特色**: 不再依赖脆弱的关键词匹配，而是由 **Agent 逐封智能判定** 是否为招聘邮件，准确率远超传统规则方案。
+
+## 功能
+
+### 📧 邮箱监控
+- **Agent 智能判定**: 拉取未处理邮件信息后，由 Agent 逐封判断是否为招聘邮件（含分类与截止时间提取）
+- **自动检查**: 每小时检查 QQ 邮箱、163 邮箱等
+- **智能分类**: 笔试/测评、面试、Offer/录用、宣讲会、投递确认、其他招聘相关
+- **飞书通知**: 发现新邮件时由 Agent 直接汇报
+- **每日简报**: 每天早上 9:00 汇总待处理邮件
+- **表格管理**: 自动记录到 Excel，支持状态标记
+
+### 🏢 官网监控
+- **国家电网**: 监控国家电网人力资源招聘平台
+- **腾讯/阿里/华为**: 可扩展（需单独适配解析器）
+- **实时通知**: 发现新招聘公告时立即发送飞书消息
+
+## 工作原理（Agent 判定模式）
+
+```
+每小时定时触发
+  ↓
+① fetch-emails.py  → 拉取未处理邮件（主题/发件人/日期/正文预览/链接）→ pending_candidates.json
+  ↓
+② Agent 逐封判断  → 是否为招聘邮件 + 分类 + 截止时间 → pending_judged.json
+  ↓
+③ record-emails.py → 招聘邮件写入 Excel，全部邮件标记已处理
+```
+
+脚本零关键词逻辑；Agent 判定结合发件人、正文内容综合判断，避免误报与漏报。
+
+## 快速开始
+
+### 1. 创建本地配置
+
+```bash
+cp scripts/config.example.json scripts/config.json
+```
+
+编辑 `scripts/config.json`，填写邮箱账号（QQ/163 使用**授权码**，不是登录密码）与飞书目标：
+
+```json
+{
+  "email_accounts": [
+    {
+      "name": "QQ 邮箱",
+      "user": "your_qq@qq.com",
+      "password": "your_auth_code",
+      "host": "pop.qq.com",
+      "port": 995
+    }
+  ],
+  "feishu_target": "user:YOUR_FEISHU_USER_ID"
+}
+```
+
+> ⚠️ `config.json` 包含真实凭据，已加入 .gitignore，不会提交或发布。
+
+### 2. 设置定时任务（OpenClaw cron）
+
+```text
+每小时整点：
+1) python3 scripts/fetch-emails.py 拉取未处理邮件候选
+2) 读取 scripts/pending_candidates.json，Agent 逐封判断是否为招聘邮件，写入 scripts/pending_judged.json
+3) python3 scripts/record-emails.py 记录结果到表格
+4) 向用户汇报发现
+
+每天早上 9:00：python3 scripts/email-daily-briefing.py
+```
+
+## 脚本说明
+
+| 脚本 | 功能 |
+|------|------|
+| `fetch-emails.py` | 连接邮箱，拉取未处理邮件候选（预过滤营销发件域名） |
+| `record-emails.py` | 按 Agent 判定结果把招聘邮件写入 Excel，更新去重列表 |
+| `email-daily-briefing.py` | 每天早上 9:00 生成并发送待处理邮件简报 |
+| `company-website-monitor.py` | 监控公司官网招聘公告（国家电网等） |
+
+## 表格结构
+
+| 列名 | 说明 |
+|------|------|
+| 日期 | 邮件收到时间 |
+| 邮箱 | 邮箱账号 (QQ/163) |
+| 主题 | 邮件主题 |
+| 发件人 | 发件人地址 |
+| 状态 | ⏳ 待处理 / ✅ 已完成 |
+| 类型 | 邮件分类 |
+| 链接 | 邮件中的重要链接 |
+| 截止日期 | 截止/面试日期（Agent 提取） |
+
+## 注意事项
+
+1. **邮箱授权码**: QQ/163 邮箱需要使用授权码，不是登录密码
+2. **凭据安全**: 授权码只存在于本地 `config.json`，不要提交到仓库
+3. **营销域名预过滤**: `fetch-emails.py` 中的 `NOISE_DOMAINS` 可按需补充
+4. **判定成本**: 单次候选超过 40 封时脚本自动截断，可考虑用子 agent 分担判定
+
+## License
+
+MIT

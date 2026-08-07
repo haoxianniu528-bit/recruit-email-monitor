@@ -1,0 +1,11 @@
+*.pyc
+__pycache__/
+*.log
+.DS_Store
+*.xlsx
+*.txt
+.env
+config.json
+*.bak*
+email-heartbeat-check.keyword-version.py
+processed_emails.json

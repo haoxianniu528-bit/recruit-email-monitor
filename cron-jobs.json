@@ -1,0 +1,60 @@
+# OpenClaw 定时任务配置
+# 导入方法：openclaw cron import /path/to/this/file
+
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "recruit-email-heartbeat",
+      "name": "招聘邮件心跳检查（Agent 判定）",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *",
+        "staggerMs": 300000
+      },
+      "description": "每小时拉取未处理邮件，由 Agent 逐封判断是否为招聘邮件并记录到表格",
+      "notifyOnMatch": true,
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "运行招聘邮件监控检查（Agent 判定模式）：1) cd <skill-dir> && python3 scripts/fetch-emails.py 拉取未处理邮件候选；2) 读取 scripts/pending_candidates.json，逐封自行判断是否为招聘邮件（verdict: yes/no；yes 时给出 type: 笔试/测评|面试|Offer/录用|宣讲会|投递确认|其他招聘相关，可提取 deadline 截止时间），写入 scripts/pending_judged.json；3) 运行 python3 scripts/record-emails.py 记录结果到表格；4) 向用户简要汇报本次发现，有招聘邮件时重点提示内容与截止时间。"
+      },
+      "sessionTarget": "main"
+    },
+    {
+      "id": "recruit-email-daily-briefing",
+      "name": "招聘邮件每日简报",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * *"
+      },
+      "description": "每天早上 9:00 汇总表格中的待处理招聘邮件，生成简报发送",
+      "notifyOnMatch": true,
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "python3 scripts/email-daily-briefing.py"
+      },
+      "sessionTarget": "main"
+    },
+    {
+      "id": "recruit-company-website",
+      "name": "公司官网招聘监控",
+      "enabled": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */4 * * *"
+      },
+      "description": "每 4 小时检查公司官网招聘公告（腾讯/阿里/华为/国家电网等）",
+      "notifyOnMatch": true,
+      "wakeMode": "now",
+      "payload": {
+        "kind": "systemEvent",
+        "text": "python3 scripts/company-website-monitor.py"
+      },
+      "sessionTarget": "main"
+    }
+  ]
+}

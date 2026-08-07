@@ -1,0 +1,26 @@
+{
+  "name": "recruit-email-monitor",
+  "version": "1.1.0",
+  "description": "招聘邮件监控系统 - Agent 智能判定招聘邮件，自动记录到表格、飞书通知、每日简报",
+  "author": "牛浩先",
+  "homepage": "https://github.com/nhaoxi/recruit-email-monitor",
+  "license": "MIT",
+  "tags": ["email", "recruitment", "monitor", "feishu", "automation", "agent"],
+  "requirements": {
+    "python": ">=3.8",
+    "pip": ["openpyxl", "requests", "beautifulsoup4"]
+  },
+  "files": [
+    "SKILL.md",
+    "scripts/fetch-emails.py",
+    "scripts/record-emails.py",
+    "scripts/email-daily-briefing.py",
+    "scripts/company-website-monitor.py",
+    "scripts/config.example.json"
+  ],
+  "config": {
+    "config_json": "scripts/config.json（本地创建，含 email_accounts 与 feishu_target，参考 config.example.json）",
+    "excel_path": "/home/erhao/shared/招聘邮件汇总.xlsx",
+    "briefing_path": "/home/erhao/shared/招聘邮件每日简报.txt"
+  }
+}
