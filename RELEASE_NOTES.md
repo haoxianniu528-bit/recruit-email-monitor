@@ -111,3 +111,14 @@ openclaw cron import cron-jobs.json
 2. **安全加固**: 邮箱授权码/飞书 ID 从脚本移出，改为本地 `scripts/config.json`（`config.example.json` 提供模板，不随 Skill 发布）
 3. **修复**: 飞书通知会话自锁问题
 4. **改进**: 营销发件域名预过滤；Agent 可提取截止时间写入表格
+
+---
+
+# 📦 v1.2.0 (2026-08-08)
+
+## 变更内容
+
+1. **新增: 超期自动归档**: 收到时间超过 30 天的待处理邮件自动标记为 `✅ 已完成（超期自动归档）`，不再出现在每日简报中（阈值 `STALE_DAYS` 可调）
+2. **修复: 简报飞书发送死锁**: 移除脚本内 `openclaw message send` CLI 调用（Agent 运行期间会因会话文件锁 SessionWriteLockTimeoutError 失败），投递改由 cron 的 announce delivery 或 Agent 回复完成（保留 `BRIEFING_SEND_CLI=1` 环境变量可选开关）
+3. **修复: cron 任务不执行**: 定时任务从 main 会话 systemEvent 改为 isolated agentTurn + announce 投递（main 会话事件依赖 heartbeat 处理，心跳关闭时事件注入后不执行）
+4. **改进**: 每小时检查无新邮件时回复 NO_REPLY 静默，避免打扰
