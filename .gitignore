@@ -9,3 +9,7 @@ config.json
 *.bak*
 email-heartbeat-check.keyword-version.py
 processed_emails.json
+
+# 运行期临时文件（Agent 判定流程）
+pending_candidates.json
+pending_judged.json

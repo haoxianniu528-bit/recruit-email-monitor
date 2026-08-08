@@ -30,6 +30,9 @@ EXCEL_PATH = '/home/erhao/shared/招聘邮件汇总.xlsx'
 # 简报输出路径
 BRIEFING_PATH = '/home/erhao/shared/招聘邮件每日简报.txt'
 
+# 超期自动归档阈值（超过该天数的待处理邮件自动标记为已完成）
+STALE_DAYS = 30
+
 def load_pending_emails():
     """加载待处理的邮件（状态不是已完成的）"""
     try:
@@ -61,15 +64,67 @@ def load_pending_emails():
         print(f"❌ 读取表格失败：{e}")
         return []
 
-def generate_briefing(emails):
+def parse_date(value):
+    """把表格中的日期值解析为 datetime，兼容 datetime 对象和字符串。"""
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(value.strip(), fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def auto_expire_stale_emails():
+    """自动归档超期待处理邮件：收到时间超过 STALE_DAYS 天的待处理邮件标记为已完成。
+
+    返回本次归档数量。归档后的邮件不再出现在简报中。
+    """
+    try:
+        wb = openpyxl.load_workbook(EXCEL_PATH)
+        ws = wb.active
+        now = datetime.now()
+        archived = 0
+
+        for row in ws.iter_rows(min_row=2):
+            date_val = row[0].value if len(row) > 0 else None
+            status_cell = row[4] if len(row) > 4 else None
+            if date_val is None or status_cell is None or not status_cell.value:
+                continue
+            status = str(status_cell.value)
+            # 已完成的跳过
+            if '✅' in status or '完成' in status:
+                continue
+            dt = parse_date(date_val)
+            if dt is None:
+                continue
+            if (now - dt).days > STALE_DAYS:
+                status_cell.value = '✅ 已完成（超期自动归档）'
+                archived += 1
+
+        if archived:
+            wb.save(EXCEL_PATH)
+            print(f"🗂️ 自动归档 {archived} 封超过 {STALE_DAYS} 天的待处理邮件")
+        else:
+            print("🗂️ 无超期待处理邮件需要归档")
+        return archived
+    except Exception as e:
+        print(f"❌ 自动归档失败：{e}")
+        return 0
+
+
+def generate_briefing(emails, archived=0):
     """生成简报内容"""
     if not emails:
+        archived_note = f"\n🗂️ 本次自动归档 {archived} 封超期邮件（> {STALE_DAYS} 天）\n" if archived else ""
         return f"""
 ═══════════════════════════════════════════════════
 📧 招聘邮件每日简报
 日期：{datetime.now().strftime('%Y年%m月%d日 %A')}
 ═══════════════════════════════════════════════════
-
+{archived_note}
 ✅ 所有邮件都已处理完毕！
 
 祝你有愉快的一天！✨
@@ -105,6 +160,9 @@ def generate_briefing(emails):
 ───────────────────────────────────────────────────
 待处理邮件：{len(emails)} 封
 """
+    
+    if archived:
+        briefing += f"🗂️ 本次自动归档 {archived} 封超期邮件（> {STALE_DAYS} 天）\n"
     
     # 类型统计
     for email_type, type_emails in sorted(by_type.items()):
@@ -203,9 +261,16 @@ def generate_briefing(emails):
     return briefing
 
 def send_briefing(briefing):
-    """发送简报（通过 Feishu）"""
+    """保存并输出简报。
+
+    注意：不要在 Agent 会话运行期间调用 `openclaw message send` CLI，
+    否则会因会话文件锁（SessionWriteLockTimeoutError）而失败。
+    投递由 cron 任务的 announce delivery 或 Agent 的回复完成。
+    如需独立 CLI 发送，可设置环境变量 BRIEFING_SEND_CLI=1（仅限会话空闲时手动执行）。
+    """
+    import os
     import subprocess
-    
+
     # 保存简报到文件
     try:
         with open(BRIEFING_PATH, 'w', encoding='utf-8') as f:
@@ -214,40 +279,43 @@ def send_briefing(briefing):
     except Exception as e:
         print(f"❌ 保存简报失败：{e}")
     
-    # 打印简报内容
+    # 打印简报内容（cron Agent 需要把完整内容转发给用户）
     print("\n" + briefing)
-    
-    # 通过 OpenClaw CLI 发送 Feishu 消息
-    print("\n📤 正在发送 Feishu 消息...")
-    try:
-        # 发送到主人的 Feishu（目标从本地 config.json 读取）
-        cmd = [
-            'openclaw', 'message', 'send',
-            '--channel', 'feishu',
-            '--target', FEISHU_TARGET,
-            '--message', briefing.strip()
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-        
-        if result.returncode == 0:
-            print("✅ Feishu 消息发送成功！")
-        else:
-            print(f"❌ 发送失败：{result.stderr}")
-    except subprocess.TimeoutExpired:
-        print("❌ 发送超时")
-    except Exception as e:
-        print(f"❌ 发送异常：{e}")
+
+    # 可选：独立 CLI 发送（仅 BRIEFING_SEND_CLI=1 时启用）
+    if os.environ.get('BRIEFING_SEND_CLI') == '1':
+        print("\n📤 正在通过 CLI 发送 Feishu 消息...")
+        try:
+            cmd = [
+                'openclaw', 'message', 'send',
+                '--channel', 'feishu',
+                '--target', FEISHU_TARGET,
+                '--message', briefing.strip()
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+            if result.returncode == 0:
+                print("✅ Feishu 消息发送成功！")
+            else:
+                print(f"❌ 发送失败：{result.stderr}")
+        except subprocess.TimeoutExpired:
+            print("❌ 发送超时")
+        except Exception as e:
+            print(f"❌ 发送异常：{e}")
 
 def main():
     print('🌅 每日招聘邮件简报\n')
     print(f'生成时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     print()
     
+    # 先自动归档超期待处理邮件（>30 天标记为已完成）
+    archived = auto_expire_stale_emails()
+    print()
+
     # 加载待处理的邮件
     emails = load_pending_emails()
     
     # 生成简报
-    briefing = generate_briefing(emails)
+    briefing = generate_briefing(emails, archived)
     
     # 发送简报
     send_briefing(briefing)

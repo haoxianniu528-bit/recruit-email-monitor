@@ -37,6 +37,7 @@ metadata: {
 - **智能分类**: 自动识别笔试/测评、面试、Offer、宣讲会、投递确认等类型
 - **实时通知**: 发现新邮件时立即发送飞书消息（由 Agent 汇报）
 - **每日简报**: 每天早上 9:00 汇总待处理邮件
+- **超期自动归档**: 收到超过 30 天的待处理邮件自动标记为已完成，不再进入简报
 - **表格管理**: 自动记录到 Excel，支持状态标记
 
 ## 工作原理（Agent 判定模式）
@@ -92,16 +93,17 @@ cp scripts/config.example.json scripts/config.json
 
 ### 3. 设置定时任务
 
-使用 OpenClaw 的 cron 系统（每小时检查，Agent 判定）：
+使用 OpenClaw 的 cron 系统（每小时检查，Agent 判定）。**两个任务都使用 isolated 会话 + announce 投递**，不要用 main 会话 systemEvent（依赖 heartbeat，且脚本内调用 `openclaw message send` 会因会话文件锁而失败）：
 
 ```text
-每小时整点：
+每小时整点（isolated agentTurn + announce → 飞书）：
 1) python3 scripts/fetch-emails.py 拉取未处理邮件候选
-2) 读取 scripts/pending_candidates.json，Agent 逐封判断是否为招聘邮件，写入 scripts/pending_judged.json
+2) Agent 逐封判断是否为招聘邮件，写入 scripts/pending_judged.json
 3) python3 scripts/record-emails.py 记录结果到表格
-4) 向用户汇报发现
+4) 有新邮件/紧急事项才汇报；无则回复 NO_REPLY 静默
 
-每天早上 9:00：python3 scripts/email-daily-briefing.py
+每天早上 9:00（isolated agentTurn + announce → 飞书）：
+python3 scripts/email-daily-briefing.py，Agent 在回复中完整转发简报全文
 ```
 
 ## 脚本说明
@@ -128,11 +130,13 @@ cp scripts/config.example.json scripts/config.json
 
 ### email-daily-briefing.py
 
-**功能**: 汇总待处理邮件，生成日报并发送
+**功能**: 汇总待处理邮件，生成日报并保存到 `/home/erhao/shared/招聘邮件每日简报.txt`，打印完整简报内容
 
-**运行频率**: 每天早上 9:00
+**超期自动归档**: 运行时会先把收到时间超过 `STALE_DAYS`（默认 30 天）的待处理邮件标记为 `✅ 已完成（超期自动归档）`，归档后不再出现在简报中，并在简报中提示本次归档数量
 
-**输出**: 生成简报文件、发送飞书消息
+**运行频率**: 每天早上 9:00（由 isolated cron 任务调用，Agent 转发简报全文给用户）
+
+> ⚠️ 脚本默认**不再**调用 `openclaw message send` CLI —— 在 Agent 会话运行期间调用会因会话文件锁（SessionWriteLockTimeoutError）失败。投递由 cron 的 announce delivery 或 Agent 回复完成。仅当设置环境变量 `BRIEFING_SEND_CLI=1` 且在会话空闲时手动运行，才会尝试 CLI 发送。
 
 ### email-heartbeat-check.py（已弃用）
 
@@ -151,16 +155,11 @@ cp scripts/config.example.json scripts/config.json
 
 ## 表格结构
 
-| 列名 | 说明 |
+| 状态 | 说明 |
 |------|------|
-| 日期 | 邮件收到时间 |
-| 邮箱 | 邮箱账号 (QQ/163) |
-| 主题 | 邮件主题 |
-| 发件人 | 发件人地址 |
-| 状态 | ⏳ 待处理 / ✅ 已完成 |
-| 类型 | 邮件分类 |
-| 链接 | 邮件中的重要链接 |
-| 截止日期 | 截止/面试日期 |
+| ⏳ 待处理 | 未处理 |
+| ✅ 已完成 | 手动标记完成 |
+| ✅ 已完成（超期自动归档） | 收到超过 30 天自动归档 |
 
 ## 命令行示例
 
