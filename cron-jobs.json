@@ -21,7 +21,7 @@
       "payload": {
         "kind": "agentTurn",
         "message": "运行招聘邮件监控检查（Agent 判定模式）：1) cd <skill-dir> && python3 scripts/fetch-emails.py 拉取未处理邮件候选；2) 读取 scripts/pending_candidates.json，逐封自行判断是否为招聘邮件（verdict: yes/no；yes 时给出 type: 笔试/测评|面试|Offer/录用|宣讲会|投递确认|其他招聘相关，可提取 deadline 截止时间），写入 scripts/pending_judged.json；3) 运行 python3 scripts/record-emails.py 记录结果到表格；4) 汇报：若有新发现的招聘邮件或即将截止事项，简要汇报内容与截止时间；若没有新邮件或没有需要用户关注的事项，直接回复 NO_REPLY（不要发消息）。",
-        "timeoutSeconds": 900
+        "timeoutSeconds": 1800
       },
       "delivery": {
         "mode": "announce",
@@ -42,7 +42,7 @@
       "payload": {
         "kind": "agentTurn",
         "message": "运行招聘邮件每日简报：cd <skill-dir> && python3 scripts/email-daily-briefing.py。脚本会生成并打印完整简报（同时保存到 /home/erhao/shared/招聘邮件每日简报.txt）。请在回复中【完整转发简报全文内容】（包括待处理概览、各类别详情、截止提醒），不要只写摘要。若简报显示所有邮件都已处理完毕，转发完整的\"全部处理完毕\"简报即可。",
-        "timeoutSeconds": 600
+        "timeoutSeconds": 1200
       },
       "delivery": {
         "mode": "announce",

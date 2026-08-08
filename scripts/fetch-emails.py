@@ -161,7 +161,7 @@ def fetch_candidates():
         pop3 = None
         account_short = 'QQ' if 'qq.com' in acct['user'] else '163'
         try:
-            pop3 = poplib.POP3_SSL(acct['host'], acct['port'])
+            pop3 = poplib.POP3_SSL(acct['host'], acct['port'], timeout=30)
             pop3.user(acct['user'])
             pop3.pass_(acct['password'])
             num = len(pop3.list()[1])
