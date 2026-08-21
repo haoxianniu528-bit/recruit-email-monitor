@@ -20,11 +20,15 @@
 
 import json
 import os
+import subprocess
 import sys
 import openpyxl
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from excel_styles import (ensure_headers, style_header, style_body, style_status_cell, style_type_cell,
+                          refresh_filter, setup_status_column, EXCEL_PATH, SHEET_MAIL, MAIL_HEADERS)
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_PATH = '/home/erhao/shared/招聘邮件汇总.xlsx'
 PROCESSED_FILE = os.path.join(SCRIPT_DIR, 'processed_emails.json')
 CANDIDATES_FILE = os.path.join(SCRIPT_DIR, 'pending_candidates.json')
 JUDGED_FILE = os.path.join(SCRIPT_DIR, 'pending_judged.json')
@@ -62,8 +66,17 @@ def main():
         with open(PROCESSED_FILE, 'r', encoding='utf-8') as f:
             processed = json.load(f)
 
-    wb = openpyxl.load_workbook(EXCEL_PATH)
-    ws = wb.active
+    # 表格不存在时自动创建（含表头）；存在则确保表头样式统一（显式取邮件 sheet）
+    if not os.path.exists(EXCEL_PATH):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = SHEET_MAIL
+        ensure_headers(ws, MAIL_HEADERS)
+    else:
+        wb = openpyxl.load_workbook(EXCEL_PATH)
+        ws = wb[SHEET_MAIL] if SHEET_MAIL in wb.sheetnames else wb.active
+        ensure_headers(ws, MAIL_HEADERS)
+        style_header(ws)
 
     added = 0
     rejected = 0
@@ -104,9 +117,28 @@ def main():
 
         processed.append(uid)
 
+    # 美化：整表统一样式（斑马纹/边框/行高/超链接）+ 状态/类型彩色标签
+    style_body(ws, ncols=len(MAIL_HEADERS), left_cols=(3, 4, 7), link_col=7)
+    for row in ws.iter_rows(min_row=2, min_col=5, max_col=6):
+        style_status_cell(row[0])
+        style_type_cell(row[1])
+    refresh_filter(ws)
+    # 状态列下拉列表 + 条件格式（用户可直接在表格里切换状态，颜色自动跟随）
+    setup_status_column(ws)
+
     wb.save(EXCEL_PATH)
     with open(PROCESSED_FILE, 'w', encoding='utf-8') as f:
         json.dump(processed, f, ensure_ascii=False, indent=2)
+
+    # 根据 Agent 判定中的 progress 指令，增量更新投递记录进度表
+    # （不再全量重建：Agent 已智能判断轮次/是否更新，规则重建会覆盖这些判断）
+    try:
+        subprocess.run(
+            [sys.executable, os.path.join(SCRIPT_DIR, 'apply-progress-updates.py')],
+            check=False, timeout=120,
+        )
+    except Exception as e:
+        print(f"⚠️ 更新投递记录进度表失败：{e}")
 
     # 清理临时文件
     for p in (CANDIDATES_FILE, JUDGED_FILE):

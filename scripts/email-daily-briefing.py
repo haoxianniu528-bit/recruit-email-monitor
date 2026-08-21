@@ -9,9 +9,13 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import json
 import os
+import sys
 
 # 本地配置文件（含 feishu_target，不随 Skill 发布）
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from excel_styles import EXCEL_PATH, SHEET_MAIL  # noqa: E402
+CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config.json')
 
 
 def load_config():
@@ -24,8 +28,8 @@ def load_config():
 CFG = load_config()
 FEISHU_TARGET = CFG.get('feishu_target', 'user:YOUR_FEISHU_USER_ID')
 
-# 表格路径
-EXCEL_PATH = '/home/erhao/shared/招聘邮件汇总.xlsx'
+# 表格路径（合并总表，读邮件 sheet）
+EXCEL_PATH = EXCEL_PATH
 
 # 简报输出路径
 BRIEFING_PATH = '/home/erhao/shared/招聘邮件每日简报.txt'
@@ -37,7 +41,7 @@ def load_pending_emails():
     """加载待处理的邮件（状态不是已完成的）"""
     try:
         wb = openpyxl.load_workbook(EXCEL_PATH)
-        ws = wb.active
+        ws = wb[SHEET_MAIL] if SHEET_MAIL in wb.sheetnames else wb.active
         
         emails = []
         headers = [cell.value for cell in ws[1]]
@@ -84,7 +88,7 @@ def auto_expire_stale_emails():
     """
     try:
         wb = openpyxl.load_workbook(EXCEL_PATH)
-        ws = wb.active
+        ws = wb[SHEET_MAIL] if SHEET_MAIL in wb.sheetnames else wb.active
         now = datetime.now()
         archived = 0
 
@@ -260,13 +264,72 @@ def generate_briefing(emails, archived=0):
     
     return briefing
 
+def send_via_feishu_api(briefing):
+    """通过飞书开放平台 API 直接发送简报（不经过 Agent/LLM）。
+
+    使用 config.json 中的 feishu_app_id / feishu_app_secret 获取 tenant_access_token，
+    然后调用 im/v1/messages 接口发送文本消息。
+    成功返回 True，失败返回 False。
+    """
+    import json
+    import urllib.request
+    import urllib.error
+
+    app_id = CFG.get('feishu_app_id', '')
+    app_secret = CFG.get('feishu_app_secret', '')
+    if not app_id or not app_secret:
+        print("⚠️ 未配置 feishu_app_id/feishu_app_secret，跳过 API 直发")
+        return False
+
+    receive_id = FEISHU_TARGET.split(':', 1)[-1] if ':' in FEISHU_TARGET else FEISHU_TARGET
+
+    try:
+        # 1. 获取 tenant_access_token
+        token_url = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal'
+        token_body = json.dumps({'app_id': app_id, 'app_secret': app_secret}).encode('utf-8')
+        req = urllib.request.Request(token_url, data=token_body, headers={'Content-Type': 'application/json'}, method='POST')
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            token_data = json.loads(resp.read().decode('utf-8'))
+        if token_data.get('code') != 0:
+            print(f"❌ 获取 tenant_access_token 失败：{token_data}")
+            return False
+        token = token_data['tenant_access_token']
+
+        # 2. 发送文本消息
+        msg_url = 'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id'
+        content = json.dumps({'text': briefing.strip()}, ensure_ascii=False)
+        msg_body = json.dumps({
+            'receive_id': receive_id,
+            'msg_type': 'text',
+            'content': content
+        }, ensure_ascii=False).encode('utf-8')
+        req = urllib.request.Request(msg_url, data=msg_body, headers={
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': f'Bearer {token}'
+        }, method='POST')
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            msg_data = json.loads(resp.read().decode('utf-8'))
+        if msg_data.get('code') == 0:
+            print(f"✅ 简报已通过飞书 API 直发成功（msg_id={msg_data.get('data', {}).get('message_id', '?')}）")
+            return True
+        else:
+            print(f"❌ 飞书发送失败：{msg_data}")
+            return False
+    except urllib.error.HTTPError as e:
+        print(f"❌ 飞书 API HTTP 错误 {e.code}：{e.read().decode('utf-8', errors='replace')}")
+        return False
+    except Exception as e:
+        print(f"❌ 飞书 API 直发异常：{e}")
+        return False
+
+
 def send_briefing(briefing):
-    """保存并输出简报。
+    """保存并输出简报，默认通过飞书 API 直发。
 
     注意：不要在 Agent 会话运行期间调用 `openclaw message send` CLI，
     否则会因会话文件锁（SessionWriteLockTimeoutError）而失败。
-    投递由 cron 任务的 announce delivery 或 Agent 的回复完成。
-    如需独立 CLI 发送，可设置环境变量 BRIEFING_SEND_CLI=1（仅限会话空闲时手动执行）。
+    默认走飞书开放平台 API 直发（不经过 Agent/LLM），
+    可通过环境变量 BRIEFING_SEND_API=0 关闭直发、BRIEFING_SEND_CLI=1 启用 CLI 发送。
     """
     import os
     import subprocess
@@ -281,6 +344,13 @@ def send_briefing(briefing):
     
     # 打印简报内容（cron Agent 需要把完整内容转发给用户）
     print("\n" + briefing)
+
+    # 默认：飞书 API 直发（不经过 LLM）
+    if os.environ.get('BRIEFING_SEND_API', '1') != '0':
+        print("\n📤 正在通过飞书 API 直发...")
+        ok = send_via_feishu_api(briefing)
+        if ok:
+            return
 
     # 可选：独立 CLI 发送（仅 BRIEFING_SEND_CLI=1 时启用）
     if os.environ.get('BRIEFING_SEND_CLI') == '1':

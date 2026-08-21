@@ -1,124 +1,50 @@
-# 🎉 发布完成！
+# 🚀 v1.3.0 发布说明（2026-08-21）
 
-## ✅ ClawHub 发布成功
+## ✨ 新增功能
 
-**Skill ID**: `recruit-email-monitor@1.0.0`
-**内部 ID**: `k97csq9awfwsnvhsb2aqpv4pks835rqm`
-**状态**: 安全审核中（通常几分钟）
+### 1. 表格美化（共享样式模块 `scripts/excel_styles.py`）
+- 表头深蓝白字加粗、行高留白；正文微软雅黑、行高加高（解决文字拥挤）
+- 隔行斑马纹、浅色边框、垂直居中、长文本自动换行
+- 状态/类型/结果列语义化彩色标签（待处理黄 / 已完成绿 / 面试橙 / Offer 绿等）
+- 链接列自动转可点击超链接；冻结首行 + 自动筛选
 
----
+### 2. 状态/结果下拉列表 + 条件格式自动变色
+- 邮件表「状态」列、进度表「结果」列支持下拉切换（进度表新增「✅ 已完成」选项）
+- 条件格式：切换下拉值颜色实时跟随，无需等待脚本重跑
+- 修复 openpyxl 条件格式 dxf 填充缺 bgColor 导致颜色不渲染的 bug
+- 自动清理孤儿 dxf 样式，防止文件反复保存膨胀
 
-## 📦 发布内容
+### 3. 两个表格合并为一个 Excel 文件
+- `招聘邮件汇总.xlsx` 内含两个工作表：sheet1 邮件列表（默认打开）+ sheet2 投递记录进度表，底部 tab 切换
+- 所有脚本改为按工作表名读写（不再依赖 active sheet），自动追加的新行同样保持美化
+- 路径/表头常量集中到 `scripts/excel_styles.py`，改路径只改一处
 
-```
-recruit-email-monitor/
-├── 📄 SKILL.md              # 技能文档
-├── 📄 README.md             # GitHub 说明
-├── 📄 INSTALL.md            # 安装指南
-├── 📄 LICENSE               # MIT 许可证
-├── 📄 _meta.json            # 元数据
-├── 📄 cron-jobs.json        # 定时任务配置
-├── 📁 scripts/
-│   ├── email-heartbeat-check.py   (382 行)
-│   └── email-daily-briefing.py    (243 行)
-└── 📁 .git/                 # Git 仓库
-```
+### 4. 补齐投递进度表脚本（修复线上缺文件）
+- 线上 v1.2.x 缺少投递记录进度表相关脚本，本版补齐：
+  `apply-progress-updates.py`（Agent 判定增量更新进度）、`build-progress-table.py`（全量重建）、`company_extract.py`（公司/岗位提取）
 
-**总计**: 1,028 行代码 + 文档
+## 🔧 脚本变更
+- 新增：`scripts/excel_styles.py`
+- 修改：`record-emails.py`（自动建表/美化/状态下拉）、`apply-progress-updates.py`（进度 sheet 更新+结果下拉）、`build-progress-table.py`（同文件重建进度 sheet）、`email-daily-briefing.py`（按 sheet 名读取）
+- 弃用保留：`email-heartbeat-check.keyword-version.py`（旧版关键词匹配，不随发布）
 
----
-
-## 🔗 访问链接
-
-**ClawHub**: 安全审核通过后可在 ClawHub 搜索 `recruit-email-monitor`
-
-**GitHub**: 需要手动推送（见下方）
-
----
-
-## 📋 后续步骤
-
-### 1. GitHub 推送（需要认证）
-
+## 📋 安装/升级
 ```bash
-# 方法 1: 使用 gh CLI
-cd /home/erhao/shared/skill/recruit-email-monitor
-gh auth login
-gh repo create nhaoxi/recruit-email-monitor --public --push
-
-# 方法 2: 手动推送
-git remote add origin https://github.com/nhaoxi/recruit-email-monitor.git
-git push -u origin main
+clawhub install recruit-email-monitor --version 1.3.0
+cp scripts/config.example.json scripts/config.json   # 填入邮箱授权码与飞书目标
 ```
-
-### 2. 等待安全审核
-
-ClawHub 会自动扫描代码，通常 5-10 分钟完成。
-审核通过后技能会公开显示。
-
-### 3. 深度优化（之后再做）
-
-- [ ] 添加单元测试
-- [ ] 创建 CHANGELOG.md
-- [ ] 添加截图（运行效果、Excel 样例）
-- [ ] 配置 GitHub Actions 自动测试
-- [ ] 添加更多配置选项
+> ⚠️ 路径常量集中在 `scripts/excel_styles.py` 顶部（`EXCEL_PATH` / `SHEET_MAIL` / `SHEET_PROGRESS`），部署到其他机器时按需修改。
 
 ---
 
-## 📊 发布统计
+# 🎉 历史发布记录
 
-| 项目 | 数值 |
-|------|------|
-| 代码行数 | 625 行 |
-| 文档行数 | 403 行 |
-| 文件数 | 9 个 |
-| 总大小 | ~30KB |
-| 版本号 | 1.0.0 |
-| 许可证 | MIT |
+## v1.2.x（2026-08-08）
+- Agent 判定模式：逐封语义判断是否为招聘邮件，替代脆弱的关键词匹配
+- 智能分类（笔试/测评、面试、Offer、宣讲会、投递确认等）+ 截止时间提取
+- 超期自动归档（30 天以上待处理邮件自动标记完成，不再进简报）
+- 每日简报绕过 LLM 直发飞书 API，消除 DeepSeek 高峰期超时
+- cron 任务改 isolated 会话 + announce 投递架构
 
----
-
-## 🎯 安装命令（给用户）
-
-```bash
-# ClawHub 安装（审核通过后）
-clawhub install recruit-email-monitor
-
-# 配置后使用
-cd ~/.openclaw/skills/recruit-email-monitor
-# 编辑 scripts/email-heartbeat-check.py 配置邮箱和飞书 ID
-openclaw cron import cron-jobs.json
-```
-
----
-
-**恭喜！你的第一个 OpenClaw Skill 已发布！** 🍊
-
----
-
-# 📦 v1.1.0 (2026-08-07)
-
-**Skill ID**: `recruit-email-monitor@1.1.0`
-**内部 ID**: `k9731s9qw8zvc0d6sx9fv3wb618c0agt`
-
-## 变更内容
-
-1. **核心架构升级**: 关键词匹配 → Agent 逐封智能判定
-   - 新增 `scripts/fetch-emails.py`（拉取未处理邮件候选）
-   - 新增 `scripts/record-emails.py`（按 Agent 判定结果记录到表格）
-   - 旧 `email-heartbeat-check.py` 弃用（保留 keyword-version 供参考）
-2. **安全加固**: 邮箱授权码/飞书 ID 从脚本移出，改为本地 `scripts/config.json`（`config.example.json` 提供模板，不随 Skill 发布）
-3. **修复**: 飞书通知会话自锁问题
-4. **改进**: 营销发件域名预过滤；Agent 可提取截止时间写入表格
-
----
-
-# 📦 v1.2.0 (2026-08-08)
-
-## 变更内容
-
-1. **新增: 超期自动归档**: 收到时间超过 30 天的待处理邮件自动标记为 `✅ 已完成（超期自动归档）`，不再出现在每日简报中（阈值 `STALE_DAYS` 可调）
-2. **修复: 简报飞书发送死锁**: 移除脚本内 `openclaw message send` CLI 调用（Agent 运行期间会因会话文件锁 SessionWriteLockTimeoutError 失败），投递改由 cron 的 announce delivery 或 Agent 回复完成（保留 `BRIEFING_SEND_CLI=1` 环境变量可选开关）
-3. **修复: cron 任务不执行**: 定时任务从 main 会话 systemEvent 改为 isolated agentTurn + announce 投递（main 会话事件依赖 heartbeat 处理，心跳关闭时事件注入后不执行）
-4. **改进**: 每小时检查无新邮件时回复 NO_REPLY 静默，避免打扰
+## v1.0.0（2026-03-18）
+- 首版发布：多邮箱监控、关键词过滤、Excel 记录、飞书通知、每日简报

@@ -80,14 +80,14 @@ crontab -e
 
 ### 步骤 6: 创建 Excel 表格（可选）
 
-首次运行时会自动创建表格，你也可以手动创建：
+首次运行时会自动创建表格（合并总表：邮件列表 + 投递进度两个 sheet），你也可以手动创建：
 
 ```bash
 # 复制示例表格（如果有）
 cp /path/to/招聘邮件汇总.xlsx /your/preferred/path/
 
-# 或在脚本中修改路径
-# 编辑 email-heartbeat-check.py 第 51 行
+# 或在脚本中修改路径（路径常量集中在 scripts/excel_styles.py）
+# 编辑 scripts/excel_styles.py
 EXCEL_PATH = '/your/path/招聘邮件汇总.xlsx'
 ```
 
