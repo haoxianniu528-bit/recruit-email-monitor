@@ -26,7 +26,8 @@ import openpyxl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from excel_styles import (ensure_headers, style_header, style_body, style_status_cell, style_type_cell,
-                          refresh_filter, setup_status_column, EXCEL_PATH, SHEET_MAIL, MAIL_HEADERS)
+                          refresh_filter, setup_status_column, neutralize_workbook,
+                          EXCEL_PATH, SHEET_MAIL, MAIL_HEADERS)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROCESSED_FILE = os.path.join(SCRIPT_DIR, 'processed_emails.json')
@@ -126,6 +127,8 @@ def main():
     # 状态列下拉列表 + 条件格式（用户可直接在表格里切换状态，颜色自动跟随）
     setup_status_column(ws)
 
+    # 安全：邮件字段来自外部（不可信），保存前把疑似公式的单元格强制为文本，防公式注入
+    neutralize_workbook(wb)
     wb.save(EXCEL_PATH)
     with open(PROCESSED_FILE, 'w', encoding='utf-8') as f:
         json.dump(processed, f, ensure_ascii=False, indent=2)

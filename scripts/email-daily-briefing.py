@@ -9,12 +9,13 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import json
 import os
+import shutil
 import sys
 
 # 本地配置文件（含 feishu_target，不随 Skill 发布）
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
-from excel_styles import EXCEL_PATH, SHEET_MAIL  # noqa: E402
+from excel_styles import EXCEL_PATH, SHEET_MAIL, neutralize_workbook  # noqa: E402
 CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config.json')
 
 
@@ -84,13 +85,23 @@ def parse_date(value):
 def auto_expire_stale_emails():
     """自动归档超期待处理邮件：收到时间超过 STALE_DAYS 天的待处理邮件标记为已完成。
 
-    返回本次归档数量。归档后的邮件不再出现在简报中。
+    安全设计（对应安全审查建议）：
+      - 默认启用，可用环境变量 ``BRIEFING_ARCHIVE=0`` 关闭；关闭时不改动表格。
+      - 归档属于「报告任务期间修改运营状态」的副作用操作，因此保存前会：
+          1) 先把整份表格备份为 ``<表格路径>.bak-<时间戳>.xlsx``（备份失败则放弃归档，保证可回滚）；
+          2) 把本次将归档的邮件清单导出到 ``archive-backup-<时间戳>.json`` 供审计/回滚。
+
+    返回本次归档数量。
     """
+    if os.environ.get('BRIEFING_ARCHIVE', '1') == '0':
+        print("🗂️ BRIEFING_ARCHIVE=0，跳过超期自动归档（表格未改动）")
+        return 0
+
     try:
         wb = openpyxl.load_workbook(EXCEL_PATH)
         ws = wb[SHEET_MAIL] if SHEET_MAIL in wb.sheetnames else wb.active
         now = datetime.now()
-        archived = 0
+        to_archive = []  # [(status_cell, record), ...]
 
         for row in ws.iter_rows(min_row=2):
             date_val = row[0].value if len(row) > 0 else None
@@ -105,14 +116,50 @@ def auto_expire_stale_emails():
             if dt is None:
                 continue
             if (now - dt).days > STALE_DAYS:
-                status_cell.value = '✅ 已完成（超期自动归档）'
-                archived += 1
+                to_archive.append((status_cell, {
+                    'date': str(date_val),
+                    'account': row[1].value if len(row) > 1 else '',
+                    'subject': row[2].value if len(row) > 2 else '',
+                    'from': row[3].value if len(row) > 3 else '',
+                }))
 
-        if archived:
-            wb.save(EXCEL_PATH)
-            print(f"🗂️ 自动归档 {archived} 封超过 {STALE_DAYS} 天的待处理邮件")
-        else:
+        if not to_archive:
             print("🗂️ 无超期待处理邮件需要归档")
+            return 0
+
+        archived = len(to_archive)
+        stamp = now.strftime('%Y%m%d-%H%M%S')
+
+        # 1) 归档前先备份整份表格；备份失败则放弃归档，保证随时可回滚
+        try:
+            backup_path = f"{EXCEL_PATH}.bak-{stamp}.xlsx"
+            shutil.copy2(EXCEL_PATH, backup_path)
+            print(f"💾 归档前已备份表格：{backup_path}")
+        except Exception as e:
+            print(f"❌ 备份表格失败，放弃自动归档以免不可回滚：{e}")
+            return 0
+
+        # 3) 应用归档改动并保存
+        for status_cell, _ in to_archive:
+            status_cell.value = '✅ 已完成（超期自动归档）'
+        neutralize_workbook(wb)
+        wb.save(EXCEL_PATH)
+
+        # 3) 导出本次归档清单，便于审计/回滚
+        try:
+            manifest_path = os.path.join(os.path.dirname(os.path.abspath(EXCEL_PATH)), f"archive-backup-{stamp}.json")
+            with open(manifest_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'archived_at': now.isoformat(),
+                    'stale_days': STALE_DAYS,
+                    'count': archived,
+                    'emails': [rec for _, rec in to_archive],
+                }, f, ensure_ascii=False, indent=2)
+            print(f"📄 归档清单已导出：{manifest_path}")
+        except Exception as e:
+            print(f"⚠️ 归档清单导出失败（不影响归档）：{e}")
+
+        print(f"🗂️ 自动归档 {archived} 封超过 {STALE_DAYS} 天的待处理邮件")
         return archived
     except Exception as e:
         print(f"❌ 自动归档失败：{e}")

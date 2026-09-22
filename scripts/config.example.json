@@ -15,5 +15,7 @@
       "port": 995
     }
   ],
-  "feishu_target": "user:YOUR_FEISHU_USER_ID"
+  "feishu_target": "user:YOUR_FEISHU_USER_ID",
+  "feishu_app_id": "cli_xxx_可选_用于每日简报API直发",
+  "feishu_app_secret": "xxx_可选"
 }

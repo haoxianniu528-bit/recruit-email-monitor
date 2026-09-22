@@ -31,6 +31,38 @@ PROGRESS_HEADERS = ['序号', '公司名称', '投递岗位', '投递时间', '�
 
 FONT_NAME = '微软雅黑'
 
+# ================== 安全：防止 Excel 公式注入（untrusted email content） ==================
+# 邮件主题/发件人/正文/链接等来自外部（不可信）。openpyxl 会把以 '=' 开头的字符串
+# 当作公式写入（cell.data_type='f'），表格中也可能混入 '+/-/@' 开头的文本，构成公式/
+# 超链接注入风险。写入表格前统一把这些单元格强制为文本类型（t="s"），内容原样保留
+# 但不会被 Excel 当作公式执行。
+_DANGEROUS_PREFIX = ('=', '+', '-', '@', '\t', '\r')
+
+
+def neutralize_untrusted_text(ws):
+    """把工作表中疑似公式的单元格强制为文本类型，防止公式注入。
+
+    在每次 `wb.save()` 之前调用（对邮件表与进度表都适用）。表格本身不使用公式，
+    因此把公式型单元格转为字符串不会破坏任何功能。
+    """
+    count = 0
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.data_type == 'f':
+                cell.data_type = 's'
+                count += 1
+            elif isinstance(cell.value, str) and cell.value[:1] in _DANGEROUS_PREFIX:
+                cell.data_type = 's'
+    return count
+
+
+def neutralize_workbook(wb):
+    """对所有工作表执行防公式注入处理，返回处理总数。"""
+    total = 0
+    for name in wb.sheetnames:
+        total += neutralize_untrusted_text(wb[name])
+    return total
+
 # ---------- 基础配色 ----------
 HEADER_FILL = '4472C4'        # 表头深蓝（Office 经典蓝）
 ZEBRA_FILL = 'F2F7FC'         # 隔行斑马纹（极浅蓝）

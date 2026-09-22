@@ -1,14 +1,14 @@
 {
   "name": "recruit-email-monitor",
-  "version": "1.3.0",
-  "description": "招聘邮件监控系统 - Agent 智能判定招聘邮件，自动记录到合并表格（邮件列表+投递进度双 sheet）、飞书通知、每日简报",
+  "version": "1.3.2",
+  "description": "招聘邮件监控系统 - Agent 智能判定招聘邮件（邮件内容视为不可信输入），自动记录到合并表格（邮件列表+投递进度双 sheet）、飞书通知、每日简报",
   "author": "牛浩先",
   "homepage": "https://github.com/haoxianniu528-bit/recruit-email-monitor",
   "license": "MIT",
   "tags": ["email", "recruitment", "monitor", "feishu", "automation", "agent", "excel"],
   "requirements": {
     "python": ">=3.8",
-    "pip": ["openpyxl"]
+    "pip": ["openpyxl==3.1.5"]
   },
   "files": [
     "SKILL.md",
