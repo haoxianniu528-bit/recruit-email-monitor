@@ -42,7 +42,7 @@ import openpyxl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from excel_styles import (ensure_headers, style_header, style_body, style_result_cell, refresh_filter,
-                          setup_result_column, EXCEL_PATH, SHEET_MAIL, SHEET_PROGRESS,
+                          setup_result_column, neutralize_workbook, EXCEL_PATH, SHEET_MAIL, SHEET_PROGRESS,
                           MAIL_HEADERS, PROGRESS_HEADERS)
 from company_extract import extract_company
 
@@ -99,12 +99,13 @@ def ensure_table():
     return wb, ws
 
 
-def find_row(ws, company):
-    """按公司名查找行号，返回行号或 None"""
+def find_rows(ws, company):
+    """按公司名查找所有行号（同一单位 n 个岗位 = n 行），返回行号列表"""
+    rows = []
     for row in ws.iter_rows(min_row=2):
         if row[1].value and str(row[1].value).strip() == company:
-            return row[0].row
-    return None
+            rows.append(row[0].row)
+    return rows
 
 
 def append_row(ws, company, position):
@@ -167,48 +168,67 @@ def apply_updates():
         result = (prog.get('result') or '').strip()
         note = (prog.get('note') or '').strip()
 
-        row_idx = find_row(ws, company)
-        if row_idx is None:
-            row_idx = append_row(ws, company, position)
-            created += 1
-            print(f"  🆕 新增公司行: {company}" + (f"（岗位：{position}）" if position else ""))
-
-        # 岗位：仅当为空时写入
-        pos_cell = get_cell(ws, row_idx, COL['投递岗位'])
-        if position and not (pos_cell.value or '').strip():
-            pos_cell.value = position
-
-        # 阶段时间 / 结果
-        if stage in STAGE_COLUMN:
-            col_name, is_result = STAGE_COLUMN[stage]
-            if is_result:
-                result_value = '✅ Offer' if stage == 'Offer' else (result or '')
-                if result_value:
-                    get_cell(ws, row_idx, COL['结果']).value = result_value
+        # 定位目标行：同一单位 n 个岗位 = n 行
+        #  - 指定了岗位：优先匹配该岗位所在行；公司已有其他岗位行但不匹配 → 追加新岗位行
+        #  - 未指定岗位：更新该公司全部岗位行（测评/面试等为企业级信息）
+        rows_c = find_rows(ws, company)
+        target_rows = []
+        if position:
+            match = [r for r in rows_c
+                     if position in (get_cell(ws, r, COL['投递岗位']).value or '')
+                     or (get_cell(ws, r, COL['投递岗位']).value or '').strip() == position]
+            if match:
+                target_rows = match
             else:
-                if time_val:
-                    get_cell(ws, row_idx, COL[col_name]).value = time_val
-                    print(f"  ✏️  {company} {col_name} ← {time_val}")
-        # 无论 stage 是什么，只要提供了 result 就更新结果列
-        if result and not (stage in STAGE_COLUMN and STAGE_COLUMN[stage][1] and stage == 'Offer'):
-            get_cell(ws, row_idx, COL['结果']).value = result
+                ridx = append_row(ws, company, position)
+                created += 1
+                print(f"  🆕 新增岗位行: {company} - {position}")
+                target_rows = [ridx]
+        elif rows_c:
+            target_rows = rows_c
+        else:
+            ridx = append_row(ws, company, position)
+            created += 1
+            print(f"  🆕 新增公司行: {company}")
+            target_rows = [ridx]
 
-        # 投递链接：仅当为空时写入
-        link_cell = get_cell(ws, row_idx, COL['投递链接'])
-        if link and not (link_cell.value or '').strip():
-            link_cell.value = link
+        for row_idx in target_rows:
+            # 岗位：仅当为空时写入
+            pos_cell = get_cell(ws, row_idx, COL['投递岗位'])
+            if position and not (pos_cell.value or '').strip():
+                pos_cell.value = position
 
-        # 备注：追加，保留用户手动内容，避免重复
-        if note:
-            remark_cell = get_cell(ws, row_idx, COL['备注'])
-            old_remark = (remark_cell.value or '').strip()
-            if note not in old_remark:
-                remark_cell.value = f"{old_remark}；{note}" if old_remark else note
+            # 阶段时间 / 结果
+            if stage in STAGE_COLUMN:
+                col_name, is_result = STAGE_COLUMN[stage]
+                if is_result:
+                    result_value = '✅ Offer' if stage == 'Offer' else (result or '')
+                    if result_value:
+                        get_cell(ws, row_idx, COL['结果']).value = result_value
+                else:
+                    if time_val:
+                        get_cell(ws, row_idx, COL[col_name]).value = time_val
+                        print(f"  ✏️  {company} {col_name} ← {time_val}")
+            # 无论 stage 是什么，只要提供了 result 就更新结果列
+            if result and not (stage in STAGE_COLUMN and STAGE_COLUMN[stage][1] and stage == 'Offer'):
+                get_cell(ws, row_idx, COL['结果']).value = result
 
-        # 最近动态：更新为当前邮件
-        if cand:
-            dynamic = f"{cand['date']} {j.get('type', '')}：{(cand.get('subject') or '')[:30]}"
-            get_cell(ws, row_idx, COL['最近动态']).value = dynamic
+            # 投递链接：仅当为空时写入
+            link_cell = get_cell(ws, row_idx, COL['投递链接'])
+            if link and not (link_cell.value or '').strip():
+                link_cell.value = link
+
+            # 备注：追加，保留用户手动内容，避免重复
+            if note:
+                remark_cell = get_cell(ws, row_idx, COL['备注'])
+                old_remark = (remark_cell.value or '').strip()
+                if note not in old_remark:
+                    remark_cell.value = f"{old_remark}；{note}" if old_remark else note
+
+            # 最近动态：更新为当前邮件
+            if cand:
+                dynamic = f"{cand['date']} {j.get('type', '')}：{(cand.get('subject') or '')[:30]}"
+                get_cell(ws, row_idx, COL['最近动态']).value = dynamic
 
         updated += 1
 
@@ -220,6 +240,8 @@ def apply_updates():
         refresh_filter(ws)
         # 结果列下拉列表 + 条件格式（用户可直接在表格里切换结果，颜色自动跟随）
         setup_result_column(ws)
+        # 安全：公司/岗位/备注/动态等来自邮件（不可信），保存前防公式注入
+        neutralize_workbook(wb)
         wb.save(EXCEL_PATH)
         print(f"✅ 进度表更新完成：更新 {updated} 条，新增公司 {created} 家 → {EXCEL_PATH}（sheet: {SHEET_PROGRESS}）")
     else:

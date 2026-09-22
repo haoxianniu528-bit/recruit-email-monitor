@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from excel_styles import (ensure_headers, style_header, style_body, style_result_cell, refresh_filter,
-                          setup_result_column, EXCEL_PATH, SHEET_MAIL, SHEET_PROGRESS, PROGRESS_HEADERS)
+                          setup_result_column, neutralize_workbook, EXCEL_PATH, SHEET_MAIL, SHEET_PROGRESS, PROGRESS_HEADERS)
 from company_extract import extract_company, extract_position
 
 # 只统计该日期（含）之后的邮件
@@ -240,6 +240,20 @@ def build():
                 'remark': o['remark'],
             })
 
+    # 展开：同一单位 n 个岗位 = n 行（投递岗位列多行值时拆成独立行）
+    expanded = []
+    for r in merged:
+        pos = (r.get('position') or '').strip()
+        parts = [p.strip() for p in pos.split('\n') if p.strip()] if pos else ['']
+        if len(parts) <= 1:
+            expanded.append(r)
+        else:
+            for p in parts:
+                nr = dict(r)
+                nr['position'] = p
+                expanded.append(nr)
+    merged = expanded
+
     # 重建进度 sheet（替换旧 sheet，邮件 sheet 保留）
     if SHEET_PROGRESS in wb.sheetnames:
         del wb[SHEET_PROGRESS]
@@ -274,6 +288,8 @@ def build():
     # 默认打开邮件 sheet
     wb.active = wb.sheetnames.index(SHEET_MAIL) if SHEET_MAIL in wb.sheetnames else 0
 
+    # 安全：重建后的行来自邮件（不可信），保存前防公式注入
+    neutralize_workbook(wb)
     wb.save(EXCEL_PATH)
     print(f"✅ 投递记录进度表已更新：{EXCEL_PATH}（sheet: {SHEET_PROGRESS}，{len(merged)} 家公司，仅统计 {SINCE_DATE} 以来）")
     return 0
